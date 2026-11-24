@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 편집기
+.vscode/
+.claude/settings.local.json
+
+# 로그·비밀 값
+*.log
+.env
+
+# Cloudflare Worker (3단계)
+.wrangler/
+.dev.vars
