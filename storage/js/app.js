@@ -5,6 +5,7 @@ import { newItem, keywordList } from './items.js';
 import { h } from './ui/dom.js';
 import { showToast } from './ui/toast.js';
 import { openItemSheet, isSheetOpen, closeItemSheet } from './ui/add-sheet.js';
+import { isViewerOpen, closeViewer } from './ui/viewer.js';
 import { renderHome } from './views/home.js';
 import { renderCategory } from './views/category.js';
 import { renderDetail } from './views/detail.js';
@@ -12,6 +13,7 @@ import { renderSettings } from './views/settings.js';
 
 const LAST_VIEW_KEY = `${KEY_PREFIX}last-view`;
 const HIDE_BANNER_KEY = `${KEY_PREFIX}hide-install-banner`;
+const LAST_TYPE_KEY = `${KEY_PREFIX}last-type`; // 추가 시트에서 마지막으로 고른 유형(텍스트/사진)
 
 const appEl = document.getElementById('app');
 let items = [];
@@ -64,15 +66,19 @@ function validRoute(r) {
   return r;
 }
 
+// 스크롤은 페이지 전체가 아니라 본문(.page) 안에서 일어남
+const scroller = () => appEl.querySelector('.page');
+
 function go(next, { restoreScroll = false } = {}) {
-  scrollMemory.set(routeKey(route), window.scrollY);
+  scrollMemory.set(routeKey(route), scroller()?.scrollTop || 0);
   closeItemSheet();
+  closeViewer();
   route = validRoute(next);
   history.replaceState(null, '', toHash(route));
   saveLastView(route);
   render();
-  const y = restoreScroll ? scrollMemory.get(routeKey(route)) || 0 : 0;
-  window.scrollTo(0, y);
+  const el = scroller();
+  if (el) el.scrollTop = restoreScroll ? scrollMemory.get(routeKey(route)) || 0 : 0;
 }
 
 /** ‹ 버튼·왼쪽 끝 밀기: 카테고리 → 홈, 상세·설정 → 마지막으로 보던 목록 */
@@ -83,9 +89,14 @@ function back() {
 
 // ───────── 데이터 ─────────
 async function addItem(fields) {
-  const item = newItem({ type: 'text', ...fields });
+  const item = newItem(fields);
   await putItem(item);
   items.push(item);
+  try {
+    localStorage.setItem(LAST_TYPE_KEY, item.type);
+  } catch {
+    /* 무시 */
+  }
   render();
   showToast(`${categoryName(item.category)}에 저장했어요`);
 }
@@ -130,7 +141,13 @@ const ctx = {
   go,
   back,
   openAdd(defaultCategory) {
-    openItemSheet({ mode: 'add', defaultCategory, getKnownKeywords: knownKeywords, onSave: addItem });
+    let defaultType = 'text';
+    try {
+      if (localStorage.getItem(LAST_TYPE_KEY) === 'photo') defaultType = 'photo';
+    } catch {
+      /* 무시 */
+    }
+    openItemSheet({ mode: 'add', defaultCategory, defaultType, getKnownKeywords: knownKeywords, onSave: addItem });
   },
   openEdit(item) {
     openItemSheet({
@@ -151,9 +168,43 @@ const VIEWS = {
   settings: renderSettings,
 };
 
+let renderedKey = null;
+
 function render() {
   route = validRoute(route);
+  // 같은 화면을 다시 그릴 때(저장·수정·되돌리기 후)는 보던 위치를 유지
+  const key = routeKey(route);
+  const keepTop = key === renderedKey ? scroller()?.scrollTop : null;
   appEl.replaceChildren(...VIEWS[route.view](ctx));
+  renderedKey = key;
+  if (keepTop != null && scroller()) scroller().scrollTop = keepTop;
+}
+
+// ───────── 아래쪽 안전 영역 고정 ─────────
+// 일부 iOS에서 env(safe-area-inset-bottom) 값이 순간적으로 바뀌면서 + 버튼이 튀는 것을 막기 위해,
+// 값을 재서 가장 큰 값으로 고정함. 화면 방향(가로·세로)이 바뀌면 다시 잼.
+function lockSafeAreaBottom() {
+  const probe = document.createElement('div');
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText =
+    'position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none;';
+  document.body.append(probe);
+  let width = window.innerWidth;
+  let max = -1;
+  const measure = () => {
+    if (window.innerWidth !== width) {
+      width = window.innerWidth;
+      max = -1;
+    }
+    const v = probe.offsetHeight;
+    if (v > max) {
+      max = v;
+      document.documentElement.style.setProperty('--safe-bottom-fixed', `${v}px`);
+    }
+  };
+  measure();
+  window.addEventListener('resize', measure);
+  window.addEventListener('orientationchange', () => setTimeout(measure, 300));
 }
 
 // ───────── 왼쪽 끝에서 오른쪽으로 밀면 뒤로 ─────────
@@ -163,7 +214,7 @@ function setupEdgeSwipe() {
     'touchstart',
     (e) => {
       const t = e.touches[0];
-      start = e.touches.length === 1 && t.clientX <= 24 && route.view !== 'home' && !isSheetOpen() ? { x: t.clientX, y: t.clientY } : null;
+      start = e.touches.length === 1 && t.clientX <= 24 && route.view !== 'home' && !isSheetOpen() && !isViewerOpen() ? { x: t.clientX, y: t.clientY } : null;
     },
     { passive: true },
   );
@@ -229,6 +280,7 @@ function registerServiceWorker() {
   let reloaded = false;
   // 새 버전이 설치되면 한 번 새로고침해서 새 파일로 바꿈 (처음 설치 때는 하지 않음)
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // 사진을 고르는 중이면 새로고침하지 않음 (다음에 열 때 반영)
     if (!hadController || reloaded || isSheetOpen()) return;
     reloaded = true;
     location.reload();
@@ -238,6 +290,7 @@ function registerServiceWorker() {
 
 // ───────── 시작 ─────────
 async function start() {
+  lockSafeAreaBottom();
   if (!isStandalone()) showInstallBanner();
   registerServiceWorker();
   setupEdgeSwipe();

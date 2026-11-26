@@ -80,7 +80,7 @@ export function renderCategory(ctx) {
       { class: 'page' },
       searchPlaceholder(`${cat.name}에서 검색 (준비 중)`),
       list.length
-        ? itemList(list, { onOpen: (item) => ctx.go({ view: 'detail', id: item.id }) })
+        ? itemList(list, { layout: cat.layout, onOpen: (item) => ctx.go({ view: 'detail', id: item.id }) })
         : emptyState(`${cat.name}에 저장한 항목이 없어요.\n+ 버튼으로 추가해 보세요.`),
     ),
     fab(() => ctx.openAdd(cat.id)),
