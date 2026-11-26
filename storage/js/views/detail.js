@@ -95,7 +95,13 @@ export function renderDetail(ctx) {
       item.type === 'link' && item.description ? h('p', { class: 'link-desc' }, item.description) : null,
       openButtons(item),
       (item.keywords || []).length
-        ? h('ul', { class: 'detail-kw', 'aria-label': '키워드' }, item.keywords.map((k) => h('li', { class: 'chip static' }, k)))
+        ? h(
+            'ul',
+            { class: 'detail-kw', 'aria-label': '키워드 (누르면 같은 키워드 항목만 보기)' },
+            item.keywords.map((k) =>
+              h('li', {}, h('button', { type: 'button', class: 'chip kw-filter-btn', onClick: () => ctx.filterByKeyword(k) }, `#${k}`)),
+            ),
+          )
         : null,
       item.note ? h('div', { class: 'detail-note' }, linkify(item.note)) : null,
       item.type === 'link' ? h('p', { class: 'link-url' }, item.url) : null,

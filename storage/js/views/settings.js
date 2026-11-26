@@ -1,7 +1,10 @@
-// 설정: 저장된 항목, 사진 용량, 사용 중인 저장 공간 (백업은 4단계에서 추가)
-import { h } from '../ui/dom.js';
+// 설정: 백업·복원, 링크 미리보기 함수, 영구 저장·저장 공간, 항목 수, 앱 정보
+import { h, formatFullDate } from '../ui/dom.js';
 import { APP_VERSION } from '../config.js';
 import { getPreviewConfig, savePreviewConfig, pingPreview } from '../preview.js';
+import { getLastBackup, markBackedUp, buildBackup, shareBackup, readBackup, restoreBackup, requestPersist, persistState } from '../backup.js';
+import { chooseDialog } from '../ui/choice-dialog.js';
+import { showToast } from '../ui/toast.js';
 import { header, backButton } from './common.js';
 
 const PING_MSG = {
@@ -136,11 +139,13 @@ export function renderSettings(ctx) {
     h(
       'main',
       { class: 'page' },
+      backupSection(ctx),
       previewSection(),
       h('h2', { class: 'section-title' }, '저장 공간'),
       h(
         'section',
         { class: 'set-group' },
+        persistRow(),
         h('div', { class: 'set-row' }, h('span', {}, '사용 중인 저장 공간'), usageEl),
         h('div', { class: 'set-row' }, h('span', {}, '쓸 수 있는 최대 공간'), quotaEl),
         row('사진', photoCount ? `${photoCount}장 · ${formatBytes(photoBytes)}` : '0장'),
@@ -162,9 +167,160 @@ export function renderSettings(ctx) {
       ),
       h('h2', { class: 'section-title' }, '앱 정보'),
       h('section', { class: 'set-group' }, row('버전', APP_VERSION)),
-      h('p', { class: 'set-note' }, '백업 내보내기·가져오기는 다음 업데이트에서 추가돼요.'),
     ),
   ];
+}
+
+// ───────── 백업 ─────────
+
+function lastBackupText() {
+  const last = getLastBackup();
+  if (!last) return '아직 없어요';
+  const days = Math.floor((Date.now() - last) / (24 * 60 * 60 * 1000));
+  return `${formatFullDate(last)}${days > 0 ? ` (${days}일 전)` : ''}`;
+}
+
+const IMPORT_ERRORS = {
+  'not-backup': '저장소 백업 파일이 아니에요. "저장소-백업-…zip" 파일을 골라 주세요.',
+  compressed: '다른 프로그램으로 다시 압축한 파일이라 읽을 수 없어요. 앱에서 내보낸 원래 파일을 골라 주세요.',
+  'newer-format': '더 새 버전의 앱에서 만든 백업이에요. 앱을 다시 열어 최신 버전으로 바꾼 뒤 가져와 주세요.',
+};
+
+function backupSection(ctx) {
+  const lastEl = h('span', { class: 'muted' }, lastBackupText());
+  const status = h('p', { class: 'set-status', role: 'status', hidden: true });
+  const say = (text, kind = '') => {
+    status.textContent = text;
+    status.className = `set-status ${kind}`;
+    status.hidden = !text;
+  };
+
+  // 백업 파일을 다 만든 뒤 한 번 더 눌러 공유 시트를 엶 (아이폰은 누른 직후에만 공유 시트를 허락함)
+  const readyBox = h('div', { class: 'backup-ready', hidden: true });
+  let readyFile = null;
+
+  const exportBtn = h('button', { type: 'button', class: 'pp-btn' }, '백업 내보내기');
+  exportBtn.addEventListener('click', async () => {
+    if (!ctx.items.length) {
+      say('백업할 항목이 아직 없어요.', 'error');
+      return;
+    }
+    exportBtn.disabled = true;
+    importBtn.disabled = true;
+    readyBox.hidden = true;
+    say('백업 파일 만드는 중…');
+    try {
+      readyFile = await buildBackup(ctx.items, (done, total) => say(`백업 파일 만드는 중… (${done}/${total})`));
+      say('');
+      readyBox.replaceChildren(
+        h('p', { class: 'backup-ready-text' }, `백업 파일이 준비됐어요 · ${formatBytes(readyFile.size)}`),
+        h('button', { type: 'button', class: 'paste-btn', onClick: saveFile }, '파일에 저장하기'),
+        h('p', { class: 'set-note tight' }, '공유 시트에서 "파일에 저장" → iCloud Drive를 고르면 폰을 바꿔도 남아요.'),
+      );
+      readyBox.hidden = false;
+    } catch (err) {
+      console.error(err);
+      say('백업 파일을 만들지 못했어요. 다시 시도해 주세요.', 'error');
+    }
+    exportBtn.disabled = false;
+    importBtn.disabled = false;
+  });
+
+  async function saveFile() {
+    if (!readyFile) return;
+    try {
+      const result = await shareBackup(readyFile);
+      if (result === 'cancelled') {
+        say('저장을 취소했어요. 다시 누르면 공유 시트가 열려요.');
+        return;
+      }
+      markBackedUp();
+      lastEl.textContent = lastBackupText();
+      say(result === 'shared' ? '백업했어요.' : '백업 파일을 내려받았어요.', 'ok');
+      readyBox.hidden = true;
+      readyFile = null;
+    } catch (err) {
+      console.error(err);
+      say('공유 시트를 열지 못했어요. "파일에 저장하기"를 다시 눌러 주세요.', 'error');
+    }
+  }
+
+  const fileInput = h('input', { type: 'file', accept: '.zip,application/zip', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
+  const importBtn = h('button', { type: 'button', class: 'pp-btn', onClick: () => fileInput.click() }, '백업 가져오기');
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (!file) return;
+    exportBtn.disabled = true;
+    importBtn.disabled = true;
+    say('백업 파일 읽는 중…');
+    try {
+      const backup = await readBackup(file);
+      const photoCount = backup.items.reduce((n, it) => n + (it.photos?.length || 0), 0);
+      const summary = `${backup.exportedAt ? formatFullDate(backup.exportedAt) : '날짜 모름'} 백업 · 항목 ${backup.items.length}개 (사진 ${photoCount}장)`;
+
+      let mode = 'replace';
+      if (ctx.items.length) {
+        mode = await chooseDialog({
+          title: '백업 가져오기',
+          message: `${summary}\n지금 앱에 항목이 ${ctx.items.length}개 있어요. 어떻게 할까요?`,
+          choices: [
+            { id: 'merge', label: '합치기', desc: '지금 항목은 그대로 두고, 백업에만 있는 항목을 더해요. 같은 항목은 더 최근에 고친 쪽을 남겨요.' },
+            { id: 'replace', label: '덮어쓰기', desc: '지금 항목을 모두 지우고 백업 내용으로 바꿔요.', danger: true },
+          ],
+        });
+        if (!mode) {
+          say('가져오기를 취소했어요.');
+          return;
+        }
+      }
+      say('가져오는 중…');
+      const result = await restoreBackup(backup.items, mode);
+      await ctx.reloadItems(); // 설정 화면도 새 숫자로 다시 그려짐
+      const msg =
+        mode === 'replace'
+          ? `백업으로 바꿨어요. 항목 ${result.total}개.`
+          : `합쳤어요. 새로 ${result.added}개, 바뀐 것 ${result.updated}개 · 모두 ${result.total}개.`;
+      showToast(msg, { seconds: 4 });
+    } catch (err) {
+      if (!IMPORT_ERRORS[err?.message]) console.error(err);
+      say(IMPORT_ERRORS[err?.message] || '가져오지 못했어요. 파일을 확인해 주세요.', 'error');
+    } finally {
+      exportBtn.disabled = false;
+      importBtn.disabled = false;
+    }
+  });
+
+  return [
+    h('h2', { class: 'section-title' }, '백업'),
+    h(
+      'section',
+      { class: 'set-form' },
+      h('div', { class: 'set-line' }, h('span', {}, '마지막 백업'), lastEl),
+      h('div', { class: 'pp-actions' }, exportBtn, importBtn),
+      status,
+      readyBox,
+      fileInput,
+    ),
+    h('p', { class: 'set-note' }, '사진·미리보기 이미지까지 ZIP 파일 하나에 담겨요. 미리보기 함수 주소·비밀 키는 백업에 넣지 않아요.'),
+  ];
+}
+
+// ───────── 영구 저장 ─────────
+
+const PERSIST_TEXT = { granted: '허용됨', denied: '허용 안 됨', unsupported: '확인할 수 없음' };
+
+function persistRow() {
+  const value = h('span', { class: 'muted' }, '확인 중…');
+  const retry = h('button', { type: 'button', class: 'mini-btn', hidden: true }, '다시 요청');
+  const show = (state) => {
+    value.textContent = PERSIST_TEXT[state] || PERSIST_TEXT.unsupported;
+    value.className = state === 'granted' ? 'ok-text' : 'muted';
+    retry.hidden = state !== 'denied';
+  };
+  retry.addEventListener('click', async () => show(await requestPersist()));
+  persistState().then(show);
+  return h('div', { class: 'set-row' }, h('span', {}, '영구 저장'), h('span', { class: 'set-row-end' }, retry, value));
 }
 
 async function estimate(usageEl, quotaEl) {

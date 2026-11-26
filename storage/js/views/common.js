@@ -15,20 +15,42 @@ export function backButton(onClick, label = '돌아가기') {
   return h('button', { type: 'button', class: 'icon-btn', 'aria-label': label, onClick }, icon('back'));
 }
 
-/** 검색은 4단계에서 만듦. 지금은 자리만. */
-export function searchPlaceholder(text) {
-  return h(
-    'div',
-    { class: 'search' },
-    icon('search'),
-    h('input', {
-      type: 'search',
-      class: 'search-input',
-      placeholder: text,
-      disabled: true,
-      'aria-label': '검색 (준비 중)',
-    }),
-  );
+/**
+ * 검색창. 글자를 칠 때마다 onInput만 부르고 화면 전체를 다시 그리지 않음 (키보드가 닫히지 않게)
+ * @param {{ placeholder: string, value?: string, onInput: (q: string) => void }} opts
+ */
+export function searchBox({ placeholder, value = '', onInput }) {
+  const input = h('input', {
+    type: 'search',
+    class: 'search-input',
+    placeholder,
+    value,
+    enterkeyhint: 'search',
+    autocomplete: 'off',
+    autocorrect: 'off',
+    autocapitalize: 'off',
+    spellcheck: 'false',
+    'aria-label': placeholder,
+  });
+  const clear = h('button', { type: 'button', class: 'search-clear', 'aria-label': '검색어 지우기', hidden: !value }, icon('close'));
+  input.addEventListener('input', () => {
+    clear.hidden = !input.value;
+    onInput(input.value);
+  });
+  input.addEventListener('keydown', (e) => {
+    // 검색 버튼(엔터)을 누르면 키보드를 내려 결과를 보기 쉽게
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      input.blur();
+    }
+  });
+  clear.addEventListener('click', () => {
+    input.value = '';
+    clear.hidden = true;
+    onInput('');
+    input.focus();
+  });
+  return h('div', { class: 'search', role: 'search' }, icon('search'), input, clear);
 }
 
 export function fab(onClick) {

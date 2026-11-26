@@ -2,8 +2,9 @@
 import { h, icon } from '../ui/dom.js';
 import { CATEGORIES, getCategory } from '../config.js';
 import { sortItems } from '../items.js';
+import { filterItems } from '../search.js';
 import { itemList } from '../ui/item-row.js';
-import { header, backButton, searchPlaceholder, fab, emptyState } from './common.js';
+import { header, backButton, searchBox, fab, emptyState } from './common.js';
 
 export function renderCategory(ctx) {
   const cat = getCategory(ctx.route.id);
@@ -59,6 +60,22 @@ export function renderCategory(ctx) {
     h('span', { class: 'caret', 'aria-hidden': 'true' }, '▾'),
   );
 
+  // ── 이 카테고리 안에서 검색 ──
+  const queryKey = `category:${cat.id}`;
+  const listBox = h('div', { 'aria-live': 'polite' });
+  function update(query) {
+    ctx.setQuery(queryKey, query);
+    const shown = query.trim() ? filterItems(list, { query }) : list;
+    listBox.replaceChildren(
+      ...(query.trim() ? [h('h2', { class: 'section-title' }, `검색 결과 ${shown.length}개`)] : []),
+      shown.length
+        ? itemList(shown, { layout: cat.layout, onOpen: (item) => ctx.go({ view: 'detail', id: item.id }) })
+        : emptyState(query.trim() ? `${cat.name}에서 찾는 항목이 없어요.` : `${cat.name}에 저장한 항목이 없어요.\n+ 버튼으로 추가해 보세요.`),
+    );
+  }
+  const search = searchBox({ placeholder: `${cat.name}에서 검색`, value: ctx.getQuery(queryKey), onInput: update });
+  update(ctx.getQuery(queryKey));
+
   function toggle(open) {
     if (open) {
       // 제목 줄 바로 아래에 펼침 (Safari 탭 안내가 위에 있어도 맞게)
@@ -75,14 +92,7 @@ export function renderCategory(ctx) {
       center: titleBtn,
     }),
     menu,
-    h(
-      'main',
-      { class: 'page' },
-      searchPlaceholder(`${cat.name}에서 검색 (준비 중)`),
-      list.length
-        ? itemList(list, { layout: cat.layout, onOpen: (item) => ctx.go({ view: 'detail', id: item.id }) })
-        : emptyState(`${cat.name}에 저장한 항목이 없어요.\n+ 버튼으로 추가해 보세요.`),
-    ),
+    h('main', { class: 'page' }, search, listBox),
     fab(() => ctx.openAdd(cat.id)),
   ];
 }

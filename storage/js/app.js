@@ -6,6 +6,7 @@ import { h } from './ui/dom.js';
 import { showToast } from './ui/toast.js';
 import { openItemSheet, isSheetOpen, closeItemSheet } from './ui/add-sheet.js';
 import { isViewerOpen, closeViewer } from './ui/viewer.js';
+import { backupReminder, markFirstRun, requestPersist } from './backup.js';
 import { renderHome } from './views/home.js';
 import { renderCategory } from './views/category.js';
 import { renderDetail } from './views/detail.js';
@@ -13,12 +14,15 @@ import { renderSettings } from './views/settings.js';
 
 const LAST_VIEW_KEY = `${KEY_PREFIX}last-view`;
 const HIDE_BANNER_KEY = `${KEY_PREFIX}hide-install-banner`;
-const LAST_TYPE_KEY = `${KEY_PREFIX}last-type`; // 추가 시트에서 마지막으로 고른 유형(텍스트/사진)
+const LAST_TYPE_KEY = `${KEY_PREFIX}last-type`; // 추가 시트에서 마지막으로 고른 유형(링크/사진/텍스트)
 
 const appEl = document.getElementById('app');
 let items = [];
 let route = { view: 'home' };
 const scrollMemory = new Map();
+const queries = new Map();
+let keywordFilter = null;
+let reminderDismissed = false; // "나중에"를 누르면 앱을 다시 열 때까지 숨김
 
 // ───────── 주소(#) ↔ 화면 ─────────
 // #/  홈 · #/c/recipe  카테고리 · #/i/<id>  상세 · #/settings  설정
@@ -173,6 +177,39 @@ const ctx = {
     });
   },
   removeItem,
+
+  // ── 검색어 (화면마다 기억, 앱을 닫으면 지워짐) ──
+  getQuery: (key) => queries.get(key) || '',
+  setQuery: (key, q) => queries.set(key, q),
+
+  // ── 키워드 필터 (홈에서 전체 카테고리 대상) ──
+  get keywordFilter() {
+    return keywordFilter;
+  },
+  /** 상세 화면의 키워드 칩을 누르면: 홈으로 가서 같은 키워드 항목만 */
+  filterByKeyword(keyword) {
+    keywordFilter = keyword;
+    queries.set('home', '');
+    go({ view: 'home' });
+  },
+  setKeywordFilter(keyword) {
+    keywordFilter = keyword || null;
+    render();
+    const el = scroller();
+    if (el) el.scrollTop = 0;
+  },
+
+  // ── 백업 ──
+  backupReminder: () => (reminderDismissed ? null : backupReminder(items.length)),
+  dismissReminder() {
+    reminderDismissed = true;
+    render();
+  },
+  /** 백업을 가져온 뒤 저장소에서 다시 읽음 */
+  async reloadItems() {
+    items = await getAllItems();
+    render();
+  },
 };
 
 // ───────── 그리기 ─────────
@@ -306,6 +343,9 @@ function registerServiceWorker() {
 // ───────── 시작 ─────────
 async function start() {
   lockSafeAreaBottom();
+  markFirstRun();
+  // 저장 공간이 부족해도 이 앱 데이터를 지우지 않도록 요청 (이미 허용됐으면 그대로)
+  requestPersist();
   if (!isStandalone()) showInstallBanner();
   registerServiceWorker();
   setupEdgeSwipe();
