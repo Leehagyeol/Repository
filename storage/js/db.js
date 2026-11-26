@@ -60,6 +60,11 @@ export const putItems = (list) =>
     list.forEach((item) => s.put(item));
   });
 export const deleteItem = (id) => run('readwrite', (s) => s.delete(id));
+/** 여러 항목을 한 번에 지움 (여러 개 골라 삭제) */
+export const deleteItems = (ids) =>
+  run('readwrite', (s) => {
+    ids.forEach((id) => s.delete(id));
+  });
 /** 전체를 지우고 바꿈 (백업 "덮어쓰기"). 한 번에 처리돼서 중간에 실패하면 원래대로 남음 */
 export const replaceAllItems = (list) =>
   run('readwrite', (s) => {

@@ -1,6 +1,9 @@
 // 앱 시작점: 화면 전환, 데이터 불러오기·저장, 마지막 화면 기억, 서비스 워커 등록
 import { KEY_PREFIX, UNDO_SECONDS, getCategory, categoryName } from './config.js';
-import { getAllItems, putItem, putItems, deleteItem } from './db.js';
+import { getAllItems, putItem, putItems, deleteItem, deleteItems } from './db.js';
+import { linkKey, extractLink } from './links.js';
+import { loadPreview, isPreviewConfigured } from './preview.js';
+import { chooseDialog } from './ui/choice-dialog.js';
 import { newItem, keywordList } from './items.js';
 import { h } from './ui/dom.js';
 import { showToast } from './ui/toast.js';
@@ -23,6 +26,7 @@ const scrollMemory = new Map();
 const queries = new Map();
 let keywordFilter = null;
 let reminderDismissed = false; // "나중에"를 누르면 앱을 다시 열 때까지 숨김
+let selection = null; // 여러 개 골라 삭제: { ids: Set, toggle, onChange }
 
 // ───────── 주소(#) ↔ 화면 ─────────
 // #/  홈 · #/c/recipe  카테고리 · #/i/<id>  상세 · #/settings  설정
@@ -77,6 +81,7 @@ function go(next, { restoreScroll = false } = {}) {
   scrollMemory.set(routeKey(route), scroller()?.scrollTop || 0);
   closeItemSheet();
   closeViewer();
+  selection = null; // 다른 화면으로 가면 선택 모드 끝
   route = validRoute(next);
   history.replaceState(null, '', toHash(route));
   saveLastView(route);
@@ -146,6 +151,81 @@ async function removeItem(item) {
   });
 }
 
+/** 여러 개 골라 삭제. 5초 안에 한꺼번에 되돌릴 수 있음 */
+async function deleteMany(ids) {
+  const idSet = new Set(ids);
+  const removed = items.filter((it) => idSet.has(it.id));
+  if (!removed.length) return;
+  try {
+    await deleteItems(ids);
+  } catch (err) {
+    console.error(err);
+    showToast('삭제하지 못했어요');
+    return;
+  }
+  items = items.filter((it) => !idSet.has(it.id));
+  selection = null;
+  render();
+  showToast(`${removed.length}개 삭제했어요`, {
+    actionLabel: '되돌리기',
+    seconds: UNDO_SECONDS,
+    onAction: async () => {
+      await putItems(removed);
+      items.push(...removed);
+      render();
+    },
+  });
+}
+
+/** F15 상단 고정 */
+async function togglePin(item) {
+  const pinned = !item.pinned;
+  await updateItem(item, { pinned });
+  showToast(pinned ? `${categoryName(item.category)} 맨 위에 고정했어요` : '고정을 풀었어요');
+}
+
+/** F16 미리보기 다시 불러오기: 이미지·사이트 이름·설명을 새로 받고, 제목이 바뀌었으면 바꿀지 물어봄 */
+async function reloadPreview(item) {
+  if (!isPreviewConfigured()) {
+    showToast('설정에서 미리보기 함수를 먼저 연결해 주세요', { seconds: 4 });
+    return;
+  }
+  const result = await loadPreview(item.url);
+  if (!result.ok) {
+    showToast('미리보기를 가져오지 못했어요. 지금 내용은 그대로 둘게요', { seconds: 4 });
+    return;
+  }
+  const fields = {
+    linkKind: result.kind,
+    siteName: result.siteName || item.siteName,
+    description: result.description || item.description || '',
+  };
+  if (result.image) fields.previewImage = result.image;
+  if (result.title && result.title !== item.title) {
+    const answer = await chooseDialog({
+      title: '제목도 바꿀까요?',
+      message: `지금: ${item.title || '(없음)'}\n새 제목: ${result.title}`,
+      choices: [
+        { id: 'replace', label: '새 제목으로 바꾸기' },
+        { id: 'keep', label: '지금 제목 그대로' },
+      ],
+      cancelLabel: '미리보기도 바꾸지 않기',
+    });
+    if (!answer) return;
+    if (answer === 'replace') fields.title = result.title;
+  }
+  const current = items.find((it) => it.id === item.id) || item;
+  await updateItem(current, fields);
+  showToast(result.image ? '미리보기를 새로 불러왔어요' : '정보를 새로 불러왔어요 (이미지는 없어서 그대로)');
+}
+
+/** F14 이미 저장한 같은 링크 찾기 → { item, categoryName } | null */
+function findDuplicate(url, excludeId) {
+  const key = linkKey(url);
+  const found = items.find((it) => it.type === 'link' && it.id !== excludeId && it.url && linkKey(it.url) === key);
+  return found ? { item: found, categoryName: categoryName(found.category) } : null;
+}
+
 const knownKeywords = () => keywordList(items);
 
 const ctx = {
@@ -157,26 +237,64 @@ const ctx = {
   },
   go,
   back,
-  openAdd(defaultCategory) {
-    // 마지막에 쓴 유형, 처음이면 링크(앱의 핵심 기능)
+  /** @param {string} defaultCategory @param {{ prefillLink?: string }} [opts] 공유 시트로 받은 링크 */
+  openAdd(defaultCategory, { prefillLink = '' } = {}) {
+    // 공유로 받은 링크면 링크, 아니면 마지막에 쓴 유형, 처음이면 링크(앱의 핵심 기능)
     let defaultType = 'link';
     try {
       const last = localStorage.getItem(LAST_TYPE_KEY);
-      if (['link', 'photo', 'text'].includes(last)) defaultType = last;
+      if (!prefillLink && ['link', 'photo', 'text'].includes(last)) defaultType = last;
     } catch {
       /* 무시 */
     }
-    openItemSheet({ mode: 'add', defaultCategory, defaultType, getKnownKeywords: knownKeywords, onSave: addItem });
+    openItemSheet({
+      mode: 'add',
+      defaultCategory,
+      defaultType,
+      prefillLink,
+      getKnownKeywords: knownKeywords,
+      findDuplicate,
+      onOpenExisting: (existing) => go({ view: 'detail', id: existing.id }),
+      onSave: addItem,
+    });
   },
   openEdit(item) {
     openItemSheet({
       mode: 'edit',
       item,
       getKnownKeywords: knownKeywords,
+      findDuplicate,
       onSave: (fields) => updateItem(item, fields),
     });
   },
   removeItem,
+  togglePin,
+  reloadPreview,
+
+  // ── 여러 개 골라 삭제 ──
+  /** 지금 화면의 선택 상태 (없으면 null) */
+  get selection() {
+    return selection;
+  },
+  startSelect() {
+    selection = {
+      ids: new Set(),
+      onChange: null,
+      toggle(id) {
+        if (this.ids.has(id)) this.ids.delete(id);
+        else this.ids.add(id);
+        this.onChange?.();
+        return this.ids.has(id);
+      },
+    };
+    render();
+  },
+  endSelect() {
+    selection = null;
+    render();
+  },
+  deleteMany,
+  refresh: () => render(),
 
   // ── 검색어 (화면마다 기억, 앱을 닫으면 지워짐) ──
   getQuery: (key) => queries.get(key) || '',
@@ -340,8 +458,58 @@ function registerServiceWorker() {
   navigator.serviceWorker.register('./sw.js', { scope: './' }).catch((err) => console.warn('서비스 워커 등록 실패', err));
 }
 
+// ───────── F13 공유 시트(단축어)로 받은 링크 ─────────
+// 단축어가 "앱주소/?add=<링크>"를 엶. 주소에서 꺼내고 바로 지워서 새로고침해도 다시 열리지 않게.
+function takeSharedLink() {
+  const params = new URLSearchParams(location.search);
+  const text = (params.get('add') || params.get('url') || params.get('text') || '').trim();
+  if (params.has('add') || params.has('url') || params.has('text')) {
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+  return text;
+}
+
+/** Safari 탭으로 열렸을 때: 여기서 저장하면 홈 화면 앱에 안 보이므로 저장하지 않고 안내 */
+function showShareHandoff(text) {
+  const { url } = extractLink(text);
+  const status = h('p', { class: 'set-status', role: 'status', hidden: true });
+  const copyBtn = h('button', { type: 'button', class: 'paste-btn' }, '링크 다시 복사하기');
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = '복사했어요. 홈 화면의 저장소 앱에서 붙여넣어 주세요.';
+      status.className = 'set-status ok';
+    } catch {
+      status.textContent = '복사하지 못했어요. 위 링크를 길게 눌러 복사해 주세요.';
+      status.className = 'set-status error';
+    }
+    status.hidden = false;
+  });
+  const el = h(
+    'div',
+    { class: 'dialog-overlay open' },
+    h('div', { class: 'dialog-backdrop' }),
+    h(
+      'div',
+      { class: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'handoff-title' },
+      h('h2', { id: 'handoff-title', class: 'dialog-title' }, '홈 화면 앱에서 저장해 주세요'),
+      h(
+        'p',
+        { class: 'dialog-msg' },
+        'Safari에서 저장하면 홈 화면 앱에 보이지 않아요.\n단축어가 링크를 복사해 두었어요. 홈 화면의 저장소 앱을 열고 + → 붙여넣기를 눌러 주세요.',
+      ),
+      h('p', { class: 'handoff-link' }, url || text),
+      copyBtn,
+      status,
+      h('button', { type: 'button', class: 'dialog-btn cancel', onClick: () => el.remove() }, '닫기'),
+    ),
+  );
+  document.body.append(el);
+}
+
 // ───────── 시작 ─────────
 async function start() {
+  const sharedLink = takeSharedLink();
   lockSafeAreaBottom();
   markFirstRun();
   // 저장 공간이 부족해도 이 앱 데이터를 지우지 않도록 요청 (이미 허용됐으면 그대로)
@@ -363,6 +531,11 @@ async function start() {
   // 주소에 화면이 적혀 있으면(새로고침) 그 화면, 아니면 마지막에 보던 화면
   route = location.hash && location.hash !== '#' ? fromHash(location.hash) : lastView();
   go(route);
+
+  if (sharedLink) {
+    if (isStandalone()) ctx.openAdd(route.view === 'category' ? route.id : '', { prefillLink: sharedLink });
+    else showShareHandoff(sharedLink);
+  }
 
   // PC에서 주소창의 #을 직접 바꿨을 때
   window.addEventListener('hashchange', () => go(fromHash(location.hash)));

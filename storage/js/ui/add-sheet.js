@@ -26,7 +26,17 @@ export function isSheetOpen() {
  * @param {() => string[]} opts.getKnownKeywords
  * @param {(fields) => Promise<void>} opts.onSave
  */
-export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 'link', getKnownKeywords, onSave }) {
+export function openItemSheet({
+  mode,
+  item,
+  defaultCategory = '',
+  defaultType = 'link',
+  getKnownKeywords,
+  onSave,
+  prefillLink = '',
+  findDuplicate,
+  onOpenExisting,
+}) {
   if (openSheet) return;
 
   const start = {
@@ -51,6 +61,15 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
   // ── 링크 ──
   const link = createLinkInput({
     initial: item?.type === 'link' ? item : null,
+    prefillText: prefillLink,
+    // 수정할 때는 자기 자신은 빼고 찾음
+    findDuplicate: findDuplicate ? (url) => findDuplicate(url, item?.id) : null,
+    onOpenExisting: onOpenExisting
+      ? (existing) => {
+          close();
+          onOpenExisting(existing);
+        }
+      : null,
     onTitle: (candidate) => {
       if (!titleTouched) titleInput.value = candidate;
       hideError();

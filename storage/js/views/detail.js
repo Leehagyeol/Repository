@@ -1,5 +1,5 @@
 // 상세: 링크(미리보기·열기) / 사진(넘기기 또는 순서대로 세로로) / 텍스트, 제목·키워드·메모, 수정·삭제
-import { h, formatFullDate, linkify } from '../ui/dom.js';
+import { h, icon, formatFullDate, linkify } from '../ui/dom.js';
 import { categoryName, getCategory } from '../config.js';
 import { blobUrl } from '../ui/blob-url.js';
 import { createCarousel } from '../ui/carousel.js';
@@ -74,6 +74,35 @@ function openButtons(item) {
   );
 }
 
+/** 고정(F15) · 미리보기 다시 불러오기(F16) */
+function actionRow(item, ctx) {
+  const pinBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: item.pinned ? 'action-btn pinned' : 'action-btn',
+      'aria-pressed': String(Boolean(item.pinned)),
+      onClick: () => ctx.togglePin(item),
+    },
+    icon(item.pinned ? 'pin' : 'pinOutline'),
+    h('span', {}, item.pinned ? '고정 해제' : '맨 위에 고정'),
+  );
+  let reloadBtn = null;
+  if (item.type === 'link' && item.url) {
+    const label = h('span', {}, '미리보기 다시 불러오기');
+    reloadBtn = h('button', { type: 'button', class: 'action-btn' }, icon('refresh'), label);
+    reloadBtn.addEventListener('click', async () => {
+      reloadBtn.disabled = true;
+      label.textContent = '불러오는 중…';
+      await ctx.reloadPreview(item);
+      // 화면이 다시 그려지지 않았을 때(실패 등)를 위해 되돌림
+      reloadBtn.disabled = false;
+      label.textContent = '미리보기 다시 불러오기';
+    });
+  }
+  return h('div', { class: 'action-row' }, pinBtn, reloadBtn);
+}
+
 export function renderDetail(ctx) {
   const item = ctx.items.find((it) => it.id === ctx.route.id);
 
@@ -94,6 +123,7 @@ export function renderDetail(ctx) {
       item.title ? h('h1', { class: 'detail-title' }, item.title) : null,
       item.type === 'link' && item.description ? h('p', { class: 'link-desc' }, item.description) : null,
       openButtons(item),
+      actionRow(item, ctx),
       (item.keywords || []).length
         ? h(
             'ul',

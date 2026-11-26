@@ -3,7 +3,7 @@
 //
 // ★★★ 앱을 수정해서 다시 배포할 때는 아래 CACHE_VERSION 값을 올리세요 (예: 'v1' → 'v2') ★★★
 // 값이 바뀌면 아이폰이 새 서비스 워커를 설치하고, 예전 캐시를 지운 뒤 새 파일로 바꿉니다.
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 
 // 장보기 앱과 같은 사이트라 캐시 저장 공간을 함께 씁니다.
 // 그래서 이름 앞에 'storage-'를 붙이고, 지울 때도 'storage-'로 시작하는 것만 지웁니다.
@@ -28,6 +28,7 @@ const APP_SHELL = [
   './js/zip.js',
   './js/ui/dom.js',
   './js/ui/choice-dialog.js',
+  './js/ui/select-bar.js',
   './js/ui/link-input.js',
   './js/ui/blob-url.js',
   './js/ui/photo-picker.js',
@@ -89,7 +90,8 @@ async function networkFirst(req) {
     // no-cache: GitHub Pages의 HTTP 캐시(약 10분) 대신 서버에 새 버전 확인
     // redirect: 'manual' → 리다이렉트 응답을 그대로 브라우저에 넘김 (Safari는 리다이렉트된 응답을 페이지로 쓰지 않음)
     const res = await fetch(req.url, { cache: 'no-cache', credentials: 'same-origin', redirect: 'manual' });
-    if (res.ok && res.type === 'basic') cache.put(req, res.clone());
+    // 공유 링크(?add=…)가 붙은 주소는 저장하지 않음 (캐시에 쌓이지 않게)
+    if (res.ok && res.type === 'basic' && !new URL(req.url).search) cache.put(req, res.clone());
     return res;
   } catch {
     return (

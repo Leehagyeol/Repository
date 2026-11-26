@@ -64,6 +64,38 @@ export function youtubeInfo(url) {
   return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? { id, shorts } : null;
 }
 
+// 공유할 때 붙는 추적용 꼬리표: 같은 페이지인지 비교할 때 무시
+const TRACKING_PARAMS = /^(utm_\w+|fbclid|gclid|igshid|igsh|si|feature|ref|ref_src|share|shared|from|fromRss|trackingCode|src|sourceType|redirect|isFirstLoad)$/i;
+
+/**
+ * 같은 링크인지 비교하는 열쇠 (F14 중복 알림)
+ * - YouTube: youtu.be / watch / Shorts / embed 모두 영상 ID 하나로
+ * - 네이버 블로그: PC·모바일·PostView 주소를 블로그ID/글번호 하나로
+ * - 그 밖: www·m. 빼고, # 뒤와 추적용 꼬리표 빼고, 끝의 / 빼고 비교
+ */
+export function linkKey(url) {
+  const yt = youtubeInfo(url);
+  if (yt) return `youtube:${yt.id}`;
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return String(url || '').trim();
+  }
+  const host = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, '');
+  if (host === 'blog.naver.com') {
+    const blogId = u.searchParams.get('blogId');
+    const logNo = u.searchParams.get('logNo');
+    if (blogId && logNo) return `naverblog:${blogId}/${logNo}`;
+    const m = u.pathname.match(/^\/([^/]+)\/(\d+)/);
+    if (m) return `naverblog:${m[1]}/${m[2]}`;
+  }
+  const params = [...u.searchParams.entries()].filter(([k]) => !TRACKING_PARAMS.test(k)).sort(([a], [b]) => a.localeCompare(b));
+  const query = params.length ? `?${new URLSearchParams(params).toString()}` : '';
+  const path = u.pathname.replace(/\/+$/, '') || '';
+  return `${host}${path}${query}`;
+}
+
 /** YouTube 앱으로 여는 주소 (앱이 깔려 있으면 앱이 열림) */
 export function youtubeAppUrl(url) {
   const yt = youtubeInfo(url);

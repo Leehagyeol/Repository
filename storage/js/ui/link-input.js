@@ -18,8 +18,11 @@ const MSG = {
  * @param {object} [opts.initial] 수정할 링크 항목 { url, linkKind, siteName, description, previewImage }
  * @param {(title: string) => void} opts.onTitle 제목 후보가 생기면 알려 줌 (사용자가 제목을 고치지 않았을 때만 시트가 반영)
  * @param {() => void} [opts.onChange]
+ * @param {string} [opts.prefillText] 공유 시트(단축어)로 받은 글 — 넣자마자 미리보기 시작
+ * @param {(url: string) => object|null} [opts.findDuplicate] 이미 저장한 같은 링크 찾기 (F14)
+ * @param {(item: object) => void} [opts.onOpenExisting] "그 항목 보기"
  */
-export function createLinkInput({ initial, onTitle, onChange }) {
+export function createLinkInput({ initial, onTitle, onChange, prefillText = '', findDuplicate, onOpenExisting }) {
   const state = {
     url: initial?.url || '',
     extra: '',
@@ -56,6 +59,7 @@ export function createLinkInput({ initial, onTitle, onChange }) {
   const shotBtn = h('button', { type: 'button', class: 'pp-btn shot-btn', onClick: () => shotInput.click() });
   const card = h('div', { class: 'link-card', hidden: true });
   const status = h('p', { class: 'link-status', role: 'status' });
+  const dupBox = h('div', { class: 'dup-box', role: 'alert', hidden: true });
 
   const el = h(
     'div',
@@ -63,6 +67,7 @@ export function createLinkInput({ initial, onTitle, onChange }) {
     pasteBtn,
     h('label', { class: 'sr-only', for: 'f-link' }, '링크'),
     input,
+    dupBox,
     card,
     status,
     shotBtn,
@@ -105,10 +110,33 @@ export function createLinkInput({ initial, onTitle, onChange }) {
     shotBtn.hidden = !state.url;
   }
 
+  /** 이미 저장한 링크면 알려 주고 그 항목으로 갈 수 있게 (저장은 막지 않음) */
+  function checkDuplicate(url) {
+    const dup = url && findDuplicate ? findDuplicate(url) : null;
+    if (!dup) {
+      dupBox.hidden = true;
+      return;
+    }
+    dupBox.replaceChildren(
+      h(
+        'p',
+        { class: 'dup-text' },
+        h('strong', {}, `이미 ${dup.categoryName}에 있어요`),
+        h('br'),
+        h('span', { class: 'dup-title' }, dup.item.title || dup.item.url),
+      ),
+      onOpenExisting
+        ? h('button', { type: 'button', class: 'dup-btn', onClick: () => onOpenExisting(dup.item) }, '그 항목 보기')
+        : null,
+    );
+    dupBox.hidden = false;
+  }
+
   async function runPreview(url, extra) {
     const my = ++token;
     state.url = url;
     state.extra = extra;
+    checkDuplicate(url);
     const yt = youtubeInfo(url);
     state.kind = yt ? 'video' : 'page';
     state.siteName = yt ? 'YouTube' : hostLabel(url);
@@ -149,6 +177,7 @@ export function createLinkInput({ initial, onTitle, onChange }) {
           token++;
           state.url = '';
           setStatus(MSG.noLink, 'error');
+          checkDuplicate('');
           render();
         }
         return;
@@ -200,6 +229,13 @@ export function createLinkInput({ initial, onTitle, onChange }) {
   });
 
   render();
+
+  // 공유 시트(단축어)로 받은 글이 있으면 바로 넣고 미리보기 시작
+  // (시트의 제목 칸이 다 만들어진 다음에 시작하도록 한 박자 늦춤)
+  if (prefillText) {
+    input.value = prefillText;
+    setTimeout(() => handleText({ immediate: true }), 0);
+  }
 
   return {
     el,

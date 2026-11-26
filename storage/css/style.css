@@ -1111,6 +1111,133 @@ html.sheet-lock, html.sheet-lock body { overflow: hidden; }
 .dialog-btn.danger .dialog-btn-label { color: var(--danger); }
 .dialog-btn.cancel { align-items: center; justify-content: center; font-weight: 600; color: var(--text-2); }
 
+/* ───────── F15 고정 표시 (강조색 노랑은 아이콘에만) ───────── */
+.pin-inline { display: inline-flex; vertical-align: -3px; margin-right: 4px; }
+.pin-inline svg { width: 16px; height: 16px; }
+.pin-corner {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.pin-corner svg { width: 16px; height: 16px; }
+.card { position: relative; }
+
+/* 상세: 고정 · 미리보기 다시 불러오기 */
+.action-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.action-btn:active { background: var(--surface-2); }
+.action-btn:disabled { opacity: 0.6; }
+.action-btn.pinned { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ───────── F14 중복 링크 ───────── */
+.dup-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
+}
+.dup-box[hidden] { display: none; }
+.dup-text { flex: 1; min-width: 0; margin: 0; font-size: 14px; }
+.dup-title { display: block; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dup-btn {
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--link);
+  font-weight: 700;
+}
+
+/* ───────── F13 Safari 탭 안내 ───────── */
+.handoff-link {
+  margin: 0 4px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 14px;
+  word-break: break-all;
+}
+.dialog .paste-btn { margin-bottom: 0; }
+.dialog .set-status { margin: 8px 4px; }
+.dialog > .dialog-btn.cancel { width: 100%; margin-top: 10px; }
+
+/* ───────── 여러 개 골라 삭제 ───────── */
+.sel-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--text-2);
+  border-radius: 50%;
+  background: var(--surface);
+  color: transparent;
+}
+.sel-mark svg { width: 16px; height: 16px; }
+.selected .sel-mark { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+.row.selectable { padding-left: 12px; }
+.row.selected, .card.selected { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
+.card .sel-mark, .grid-cell .sel-mark { position: absolute; top: 6px; right: 6px; z-index: 2; }
+.selecting .badge-count { display: none; } /* 오른쪽 위 체크 표시와 겹치지 않게 */
+.grid-cell.selected img, .grid-cell.selected .grid-text { opacity: 0.6; }
+.grid-cell.selected { box-shadow: inset 0 0 0 3px var(--primary); }
+.select-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px calc(12px + var(--safe-right)) calc(10px + var(--safe-bottom-fixed)) calc(16px + var(--safe-left));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+}
+.select-count { flex: 1; font-weight: 700; }
+.select-all, .select-delete {
+  min-height: var(--tap);
+  padding: 0 14px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+.select-all { border: 1px solid var(--border); background: var(--surface-2); }
+.select-delete { border: 0; background: var(--danger); color: #FFFFFF; }
+.select-all:disabled, .select-delete:disabled { opacity: 0.45; }
+@media (prefers-color-scheme: dark) {
+  .select-delete { background: #C0392B; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sheet, .sheet-backdrop, .toast, .viewer, .dialog-overlay { transition: none; }
 }

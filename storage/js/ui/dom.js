@@ -27,6 +27,10 @@ const ICONS = {
   plus: '<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
   search: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // 고정 표시: 강조색(노랑) 채우기 + 진한 테두리 (밝은 바탕에서도 보이게)
+  pin: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 3h6l-1 6 3.5 3.5V14H13v6l-1 1.5L11 20v-6H6.5v-1.5L10 9z" fill="#E9B44C" stroke="#8A5F0E" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  pinOutline: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 3h6l-1 6 3.5 3.5V14H13v6l-1 1.5L11 20v-6H6.5v-1.5L10 9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
 };
 

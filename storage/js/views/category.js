@@ -4,7 +4,8 @@ import { CATEGORIES, getCategory } from '../config.js';
 import { sortItems } from '../items.js';
 import { filterItems } from '../search.js';
 import { itemList } from '../ui/item-row.js';
-import { header, backButton, searchBox, fab, emptyState } from './common.js';
+import { createSelectBar } from '../ui/select-bar.js';
+import { header, backButton, searchBox, fab, emptyState, selectToggle } from './common.js';
 
 export function renderCategory(ctx) {
   const cat = getCategory(ctx.route.id);
@@ -63,16 +64,32 @@ export function renderCategory(ctx) {
   // ── 이 카테고리 안에서 검색 ──
   const queryKey = `category:${cat.id}`;
   const listBox = h('div', { 'aria-live': 'polite' });
+  const selection = ctx.selection;
+  let visible = [];
   function update(query) {
     ctx.setQuery(queryKey, query);
     const shown = query.trim() ? filterItems(list, { query }) : list;
+    visible = shown;
     listBox.replaceChildren(
       ...(query.trim() ? [h('h2', { class: 'section-title' }, `검색 결과 ${shown.length}개`)] : []),
       shown.length
-        ? itemList(shown, { layout: cat.layout, onOpen: (item) => ctx.go({ view: 'detail', id: item.id }) })
+        ? itemList(shown, { layout: cat.layout, selection, onOpen: (item) => ctx.go({ view: 'detail', id: item.id }) })
         : emptyState(query.trim() ? `${cat.name}에서 찾는 항목이 없어요.` : `${cat.name}에 저장한 항목이 없어요.\n+ 버튼으로 추가해 보세요.`),
     );
+    bar?.update();
   }
+
+  // 선택 모드: + 버튼 대신 아래 막대 (여러 개 골라 삭제)
+  const bar = selection
+    ? createSelectBar({
+        selection,
+        visibleIds: () => visible.map((it) => it.id),
+        onSelectAll: () => ctx.refresh(),
+        onDelete: (ids) => ctx.deleteMany(ids),
+      })
+    : null;
+  if (selection) selection.onChange = () => bar.update();
+
   const search = searchBox({ placeholder: `${cat.name}에서 검색`, value: ctx.getQuery(queryKey), onInput: update });
   update(ctx.getQuery(queryKey));
 
@@ -90,9 +107,10 @@ export function renderCategory(ctx) {
     header({
       left: backButton(() => ctx.go({ view: 'home' }), '홈으로'),
       center: titleBtn,
+      right: list.length ? selectToggle(ctx) : null,
     }),
     menu,
     h('main', { class: 'page' }, search, listBox),
-    fab(() => ctx.openAdd(cat.id)),
+    bar ? bar.el : fab(() => ctx.openAdd(cat.id)),
   ];
 }

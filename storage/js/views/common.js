@@ -53,6 +53,13 @@ export function searchBox({ placeholder, value = '', onInput }) {
   return h('div', { class: 'search', role: 'search' }, icon('search'), input, clear);
 }
 
+/** 목록 화면 위쪽의 "선택" / "완료" (여러 개 골라 삭제) */
+export function selectToggle(ctx) {
+  return ctx.selection
+    ? h('button', { type: 'button', class: 'text-btn', onClick: () => ctx.endSelect() }, '완료')
+    : h('button', { type: 'button', class: 'text-btn', onClick: () => ctx.startSelect() }, '선택');
+}
+
 export function fab(onClick) {
   return h('button', { type: 'button', class: 'fab', 'aria-label': '추가', onClick }, icon('plus'));
 }
