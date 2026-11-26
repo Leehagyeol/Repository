@@ -2,7 +2,9 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- viewport-fit=cover를 쓰지 않음: 앱 화면이 상태 표시줄(시계·배터리) 밑으로 올라가지 않고 그 아래에서 시작.
+       cover를 쓰면 iOS가 상태 표시줄 부분에 그라데이션을 덮어 제목을 가렸음 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>저장소</title>
   <meta name="description" content="링크·사진·메모를 모아 두는 개인 저장소">
   <meta name="color-scheme" content="light dark">
@@ -10,8 +12,8 @@
   <!-- iOS 홈 화면 앱(standalone) -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <!-- default: 앱 화면이 상태 표시줄(시계·배터리) 아래에서 시작함.
-       black-translucent는 화면이 상태 표시줄 밑까지 올라가 iOS가 그라데이션을 덮어 제목을 가렸음 -->
+  <!-- default: 상태 표시줄을 앱 화면과 겹치지 않는 별도 칸으로 둠 (black-translucent는 겹침).
+       이 값은 홈 화면에 추가할 때 읽히므로 바꾼 뒤에는 아이콘을 지우고 다시 추가해야 반영됨 -->
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="저장소">
   <meta name="theme-color" content="#2F6F68">
