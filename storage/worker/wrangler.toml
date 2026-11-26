@@ -1,0 +1,13 @@
+# Cloudflare Worker 설정 — 저장소 앱 링크 미리보기 함수
+# 배포 방법은 같은 폴더의 README.md 를 보세요.
+
+name = "storage-preview"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+[vars]
+# 이 주소에서 온 요청만 받습니다. 여러 개면 쉼표로 구분.
+ALLOWED_ORIGINS = "https://leehagyeol.github.io"
+
+# 비밀 키(PREVIEW_KEY)는 여기에 쓰지 마세요. 아래 명령으로 Cloudflare에만 저장합니다.
+#   npx wrangler secret put PREVIEW_KEY

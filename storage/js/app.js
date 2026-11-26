@@ -1,6 +1,6 @@
 // 앱 시작점: 화면 전환, 데이터 불러오기·저장, 마지막 화면 기억, 서비스 워커 등록
 import { KEY_PREFIX, UNDO_SECONDS, getCategory, categoryName } from './config.js';
-import { getAllItems, putItem, deleteItem } from './db.js';
+import { getAllItems, putItem, putItems, deleteItem } from './db.js';
 import { newItem, keywordList } from './items.js';
 import { h } from './ui/dom.js';
 import { showToast } from './ui/toast.js';
@@ -88,17 +88,30 @@ function back() {
 }
 
 // ───────── 데이터 ─────────
+/** 사진 여러 장: 카테고리 설정(groupPhotos)이 없으면 사진마다 따로 저장 */
+function splitPhotos(fields) {
+  const group = getCategory(fields.category)?.groupPhotos;
+  if (fields.type !== 'photo' || group || fields.photos.length <= 1) return [newItem(fields)];
+  // 고른 순서대로 목록 위에서부터 보이도록 첫 사진을 가장 최근 시각으로
+  const now = Date.now();
+  const n = fields.photos.length;
+  return fields.photos.map((photo, i) =>
+    newItem({ ...fields, photos: [photo], createdAt: now + (n - 1 - i), updatedAt: now + (n - 1 - i) }),
+  );
+}
+
 async function addItem(fields) {
-  const item = newItem(fields);
-  await putItem(item);
-  items.push(item);
+  const created = splitPhotos(fields);
+  await putItems(created);
+  items.push(...created);
   try {
-    localStorage.setItem(LAST_TYPE_KEY, item.type);
+    localStorage.setItem(LAST_TYPE_KEY, fields.type);
   } catch {
     /* 무시 */
   }
   render();
-  showToast(`${categoryName(item.category)}에 저장했어요`);
+  const where = categoryName(fields.category);
+  showToast(created.length > 1 ? `${where}에 ${created.length}개 저장했어요` : `${where}에 저장했어요`);
 }
 
 async function updateItem(item, fields) {
@@ -141,9 +154,11 @@ const ctx = {
   go,
   back,
   openAdd(defaultCategory) {
-    let defaultType = 'text';
+    // 마지막에 쓴 유형, 처음이면 링크(앱의 핵심 기능)
+    let defaultType = 'link';
     try {
-      if (localStorage.getItem(LAST_TYPE_KEY) === 'photo') defaultType = 'photo';
+      const last = localStorage.getItem(LAST_TYPE_KEY);
+      if (['link', 'photo', 'text'].includes(last)) defaultType = last;
     } catch {
       /* 무시 */
     }

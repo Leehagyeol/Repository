@@ -2,7 +2,7 @@
 // 필드는 기획문서 "항목 유형과 데이터 모델"을 따릅니다. 사진·링크 필드는 다음 단계를 위해 자리만 둡니다.
 
 export function makeId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 export function newItem(fields = {}) {
@@ -17,6 +17,7 @@ export function newItem(fields = {}) {
     url: null, // 링크만
     linkKind: null, // 'video' | 'page' (링크만)
     siteName: null,
+    description: '', // 링크 설명 한 줄 (기획문서 "앱이 채우는 것")
     previewImage: null, // Blob (링크 미리보기 사본)
     photos: [], // [{ full: Blob, thumb: Blob }]
     pinned: false,

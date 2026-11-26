@@ -54,4 +54,9 @@ async function run(mode, action) {
 
 export const getAllItems = () => run('readonly', (s) => s.getAll());
 export const putItem = (item) => run('readwrite', (s) => s.put(item));
+/** 여러 항목을 한 번에 저장 (사진 여러 장을 따로 저장할 때) */
+export const putItems = (list) =>
+  run('readwrite', (s) => {
+    list.forEach((item) => s.put(item));
+  });
 export const deleteItem = (id) => run('readwrite', (s) => s.delete(id));

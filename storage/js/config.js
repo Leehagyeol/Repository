@@ -4,8 +4,10 @@
 // - name: 화면에 보이는 이름. 언제든 바꿔도 됩니다.
 // - layout: 카테고리 화면의 목록 모양. 'list' 목록 / 'card' 카드(썸네일 크게, 2열) / 'grid' 사진 격자(3열).
 //   홈의 "최근 저장"은 항상 목록입니다.
+// - groupPhotos: true면 사진 여러 장을 한 항목으로 묶어 고른 순서대로 보여 줌(위에서 아래로).
+//   없거나 false면 사진마다 따로 저장됨.
 export const CATEGORIES = [
-  { id: 'recipe', name: '레시피', layout: 'card' },
+  { id: 'recipe', name: '레시피', layout: 'card', groupPhotos: true },
   { id: 'parenting', name: '육아', layout: 'list' },
   { id: 'craft', name: '만들기', layout: 'card' },
   { id: 'shopping', name: '쇼핑', layout: 'list' },
@@ -13,7 +15,7 @@ export const CATEGORIES = [
   { id: 'meme', name: '짤방', layout: 'grid' },
 ];
 
-export const APP_VERSION = '0.2.0 (2단계)';
+export const APP_VERSION = '0.3.0 (3단계)';
 
 // 장보기 앱(grocery)과 같은 사이트를 쓰므로 이름 앞에 꼭 'storage-'를 붙입니다.
 export const DB_NAME = 'storage-db';

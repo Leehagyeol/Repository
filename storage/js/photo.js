@@ -78,6 +78,20 @@ function freeCanvas(c) {
 }
 
 /**
+ * 이미지 한 장을 긴 변 maxSide 이하 JPEG 하나로 줄임 (링크 미리보기 이미지·스크린샷용)
+ * @param {Blob} blob
+ */
+export async function shrinkImage(blob, maxSide = 800, quality = 0.8) {
+  const img = await loadImage(blob);
+  const s = fit(img.naturalWidth, img.naturalHeight, maxSide);
+  const canvas = drawScaled(img, img.naturalWidth, img.naturalHeight, s.w, s.h);
+  const out = await toJpeg(canvas, quality);
+  freeCanvas(canvas);
+  img.src = '';
+  return out;
+}
+
+/**
  * 사진 파일 하나를 줄여서 { full, thumb, width, height } 로 돌려줌
  * @param {File} file
  */

@@ -1,12 +1,14 @@
-// 아래에서 올라오는 추가·수정 시트. 유형: 텍스트 / 사진 (링크는 3단계)
+// 아래에서 올라오는 추가·수정 시트. 유형: 링크 / 사진 / 텍스트
 import { h } from './dom.js';
-import { CATEGORIES } from '../config.js';
+import { CATEGORIES, getCategory } from '../config.js';
 import { createKeywordInput } from './keyword-input.js';
 import { createPhotoPicker } from './photo-picker.js';
+import { createLinkInput } from './link-input.js';
 
 const TYPES = [
-  { id: 'text', label: '텍스트' },
-  { id: 'photo', label: '사진' },
+  { id: 'link', label: '링크', title: '링크 추가' },
+  { id: 'photo', label: '사진', title: '사진 추가' },
+  { id: 'text', label: '텍스트', title: '텍스트 추가' },
 ];
 
 let openSheet = null;
@@ -20,11 +22,11 @@ export function isSheetOpen() {
  * @param {'add'|'edit'} opts.mode
  * @param {object} [opts.item] 수정할 항목
  * @param {string} [opts.defaultCategory] 추가할 때 미리 고를 카테고리 id ('' = 직접 선택)
- * @param {'text'|'photo'} [opts.defaultType] 추가할 때 처음 보여 줄 유형
+ * @param {'link'|'photo'|'text'} [opts.defaultType] 추가할 때 처음 보여 줄 유형
  * @param {() => string[]} opts.getKnownKeywords
- * @param {(fields) => Promise<void>} opts.onSave { type, title, note, category, keywords, photos }
+ * @param {(fields) => Promise<void>} opts.onSave
  */
-export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 'text', getKnownKeywords, onSave }) {
+export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 'link', getKnownKeywords, onSave }) {
   if (openSheet) return;
 
   const start = {
@@ -37,25 +39,30 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
   };
   let type = start.type;
   let category = start.category;
+  // 사용자가 제목을 직접 고쳤으면 링크 미리보기 제목으로 덮어쓰지 않음 (수정할 때는 처음부터 그대로 둠)
+  let titleTouched = mode === 'edit' && Boolean(start.title);
 
   // ── 유형 고르기 (추가할 때만) ──
   const typeButtons = TYPES.map((t) =>
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'seg-btn',
-        'aria-pressed': String(t.id === type),
-        onClick: () => setType(t.id),
-      },
-      t.label,
-    ),
+    h('button', { type: 'button', class: 'seg-btn', 'aria-pressed': String(t.id === type), onClick: () => setType(t.id) }, t.label),
   );
   const segment = mode === 'add' ? h('div', { class: 'seg', role: 'group', 'aria-label': '유형' }, typeButtons) : null;
 
+  // ── 링크 ──
+  const link = createLinkInput({
+    initial: item?.type === 'link' ? item : null,
+    onTitle: (candidate) => {
+      if (!titleTouched) titleInput.value = candidate;
+      hideError();
+    },
+    onChange: hideError,
+  });
+  const linkSection = h('div', { class: 'type-section' }, link.el);
+
   // ── 사진 ──
-  const picker = createPhotoPicker({ initial: start.photos, onChange: hideError });
-  const photoSection = h('div', { class: 'photo-section' }, picker.el);
+  const picker = createPhotoPicker({ initial: start.photos, onChange: onPhotosChange });
+  const groupNote = h('p', { class: 'group-note', hidden: true });
+  const photoSection = h('div', { class: 'type-section' }, picker.el, groupNote);
 
   // ── 제목·내용 ──
   const titleInput = h('input', {
@@ -68,6 +75,7 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
     autocomplete: 'off',
   });
   const noteInput = h('textarea', { id: 'f-note', class: 'field note', value: start.note });
+  titleInput.addEventListener('input', () => (titleTouched = titleInput.value.trim() !== ''));
   titleInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
@@ -87,6 +95,7 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
           category = c.id;
           catButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(CATEGORIES[i].id === category)));
           hideError();
+          updateGroupNote();
         },
       },
       c.name,
@@ -120,6 +129,7 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
       'div',
       { class: 'sheet-body' },
       segment,
+      linkSection,
       photoSection,
       h('label', { class: 'sr-only', for: 'f-title' }, '제목'),
       titleInput,
@@ -139,19 +149,40 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
   function setType(next) {
     type = next;
     typeButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(TYPES[i].id === type)));
-    const isPhoto = type === 'photo';
-    photoSection.hidden = !isPhoto;
-    noteInput.placeholder = isPhoto ? '메모 (선택)' : '내용을 입력하세요';
-    noteInput.rows = isPhoto ? 3 : 6;
-    noteInput.classList.toggle('short', isPhoto);
-    kwLabelNote.textContent = isPhoto ? '(권장)' : '(선택)';
-    sheetTitle.textContent = mode === 'edit' ? '수정' : isPhoto ? '사진 추가' : '텍스트 추가';
+    linkSection.hidden = type !== 'link';
+    photoSection.hidden = type !== 'photo';
+    const isText = type === 'text';
+    titleInput.placeholder = type === 'link' ? '제목 (자동으로 채워져요)' : '제목 (선택)';
+    noteInput.placeholder = isText ? '내용을 입력하세요' : '메모 (선택)';
+    noteInput.rows = isText ? 6 : 3;
+    noteInput.classList.toggle('short', !isText);
+    kwLabelNote.textContent = isText ? '(선택)' : '(권장)';
+    sheetTitle.textContent = mode === 'edit' ? '수정' : TYPES.find((t) => t.id === type).title;
     hideError();
     updateHint();
   }
 
   function updateHint() {
-    kwHint.hidden = !(type === 'photo' && kw.getKeywords().length === 0);
+    kwHint.hidden = !(type !== 'text' && kw.getKeywords().length === 0);
+  }
+
+  /** 사진 여러 장일 때 어떻게 저장되는지 미리 알려 줌 */
+  function updateGroupNote() {
+    const n = picker.getPhotos().length;
+    if (mode === 'edit' || n < 2 || !category) {
+      groupNote.hidden = true;
+      return;
+    }
+    const cat = getCategory(category);
+    groupNote.textContent = cat?.groupPhotos
+      ? `사진 ${n}장을 한 항목으로 묶어 고른 순서대로 저장해요.`
+      : `사진 ${n}장을 각각 따로 저장해요.`;
+    groupNote.hidden = false;
+  }
+
+  function onPhotosChange() {
+    hideError();
+    updateGroupNote();
   }
 
   setType(type);
@@ -179,7 +210,8 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
       noteInput.value !== start.note ||
       category !== start.category ||
       kw.getKeywords().join('\n') !== start.keywords.join('\n') ||
-      picker.isChanged()
+      picker.isChanged() ||
+      link.isChanged()
     );
   }
 
@@ -216,25 +248,33 @@ export function openItemSheet({ mode, item, defaultCategory = '', defaultType = 
     saving = true;
     saveBtn.disabled = true;
     try {
-      if (type === 'photo' && picker.isBusy()) {
-        saveBtn.textContent = '줄이는 중…';
-        await picker.whenIdle();
-        saveBtn.textContent = '저장';
+      let extra = { photos: [] };
+      if (type === 'photo') {
+        if (picker.isBusy()) {
+          saveBtn.textContent = '줄이는 중…';
+          await picker.whenIdle();
+        }
         if (picker.getPhotos().length === 0) throw new Error('no-photo');
+        extra = { photos: picker.getPhotos() };
+      } else if (type === 'link') {
+        if (link.isBusy()) saveBtn.textContent = '불러오는 중…';
+        await link.settle();
+        const data = link.getData();
+        if (!data.url) throw new Error('no-link');
+        extra = { ...data, photos: [] };
       }
-      await onSave({
-        type,
-        title: titleInput.value.trim(),
-        note,
-        category,
-        keywords: kw.getKeywords(),
-        photos: type === 'photo' ? picker.getPhotos() : [],
-      });
+      saveBtn.textContent = '저장';
+      const title = titleInput.value.trim() || (type === 'link' ? link.getTitleCandidate() : '');
+      await onSave({ type, title, note, category, keywords: kw.getKeywords(), ...extra });
       close();
     } catch (err) {
-      console.error(err);
       saveBtn.textContent = '저장';
-      showError(err.message === 'no-photo' ? '사진을 열지 못했어요. 다른 사진을 골라 주세요.' : '저장하지 못했어요. 다시 시도해 주세요.');
+      const msg = {
+        'no-photo': '사진을 열지 못했어요. 다른 사진을 골라 주세요.',
+        'no-link': '링크를 넣어 주세요.',
+      }[err.message];
+      if (!msg) console.error(err);
+      showError(msg || '저장하지 못했어요. 다시 시도해 주세요.');
       saving = false;
       saveBtn.disabled = false;
     }
