@@ -121,7 +121,7 @@ export function createLinkInput({ initial, onTitle, onChange, prefillText = '', 
       h(
         'p',
         { class: 'dup-text' },
-        h('strong', {}, `이미 ${dup.categoryName}에 있어요`),
+        h('strong', {}, '이미 저장된 링크입니다'),
         h('br'),
         h('span', { class: 'dup-title' }, dup.item.title || dup.item.url),
       ),

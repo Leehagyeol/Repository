@@ -15,7 +15,7 @@ export const CATEGORIES = [
   { id: 'meme', name: '짤방', layout: 'grid' },
 ];
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.1.1';
 
 // 장보기 앱(grocery)과 같은 사이트를 쓰므로 이름 앞에 꼭 'storage-'를 붙입니다.
 export const DB_NAME = 'storage-db';
